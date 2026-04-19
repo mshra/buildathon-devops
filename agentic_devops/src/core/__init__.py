@@ -13,7 +13,7 @@ from .config import (
 )
 
 from .credentials import (
-    AWSCredentials,
+    DockerCredentials,
     GitHubCredentials,
     CredentialManager,
     get_credential_manager,
@@ -39,7 +39,7 @@ __all__ = [
     'load_config',
     
     # Credentials
-    'AWSCredentials',
+    'DockerCredentials',
     'GitHubCredentials',
     'CredentialManager',
     'get_credential_manager',

@@ -74,12 +74,28 @@ def check_security(input_text: str) -> SecurityCheckOutput:
                 reasoning=f"Input contains potentially dangerous command pattern: {pattern}"
             )
     
-    # Check for AWS credentials
-    if re.search(r"(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|aws_access_key_id|aws_secret_access_key)", input_text):
+    # Check for dangerous Docker options
+    if re.search(r"--privileged", input_text):
         return SecurityCheckOutput(
             is_malicious=True,
-            reasoning="Input contains AWS credential information"
+            reasoning="Input contains --privileged flag which grants full container access"
         )
+    
+    if re.search(r"--network\s+=?\s*host", input_text):
+        return SecurityCheckOutput(
+            is_malicious=True,
+            reasoning="Input uses host network which bypasses container isolation"
+        )
+    
+    if re.search(r"volume.*:/|bind.*:/", input_text, re.IGNORECASE):
+        if re.search(r":/", input_text):
+            check_paths = re.findall(r"([^\\s]*:/[^\\s]*)", input_text)
+            for p in check_paths:
+                if p.startswith("/host") or p.startswith("/root") or p.startswith("/etc"):
+                    return SecurityCheckOutput(
+                        is_malicious=True,
+                        reasoning=f"Input mounts sensitive path: {p}"
+                    )
     
     # Check for GitHub tokens
     if re.search(r"(github_token|GITHUB_TOKEN|ghp_[a-zA-Z0-9]{36})", input_text):
@@ -114,13 +130,12 @@ def check_sensitive_info(output_text: str) -> SensitiveInfoOutput:
     """
     # Patterns for sensitive information
     sensitive_patterns = [
-        # AWS credentials
-        r"(AKIA[0-9A-Z]{16})",  # AWS Access Key ID
-        r"([0-9a-zA-Z/+]{40})",  # AWS Secret Access Key
+        # Docker credentials
+        r"(DOCKER_[A-Z_]+)",  # Docker env vars
         
         # GitHub tokens
-        r"(github_pat_[a-zA-Z0-9_]{22,})",  # GitHub Personal Access Token
-        r"(ghp_[a-zA-Z0-9]{36})",  # GitHub Token
+        r"(github_pat_[a-zA-Z0-9_]{22,})",
+        r"(ghp_[a-zA-Z0-9]{36})",
         
         # Private keys
         r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----",

@@ -2,7 +2,7 @@
 GitHub Service Module - Provides functionality for interacting with GitHub APIs.
 
 This module enables management of GitHub repositories, branches, content, and other
-GitHub resources, with integration points for AWS services.
+GitHub resources, with integration points for Docker deployments.
 """
 
 import os
@@ -448,7 +448,7 @@ class GitHubService:
             endpoint = "user/repos"
         
         return self._make_request("POST", endpoint, data=data)
-    
+
     def delete_repository(
         self,
         repo: str,
@@ -471,7 +471,7 @@ class GitHubService:
         repo_path = self._get_repo_path(repo, owner)
         self._make_request("DELETE", repo_path)
         return True
-    
+
     #
     # Content Operations
     #
@@ -705,11 +705,99 @@ class GitHubService:
             data["author"] = author
             
         return self._make_request("DELETE", f"{repo_path}/contents/{path}", data=data)
-    
+
+    #
+    # Issues & Pull Requests
+    #
+
+    def list_issues(
+        self,
+        repo: str,
+        owner: Optional[str] = None,
+        state: str = "open",
+        labels: Optional[List[str]] = None,
+        per_page: int = DEFAULT_PAGE_SIZE,
+    ) -> List[Dict[str, Any]]:
+        """List issues for a repository."""
+        repo_path = self._get_repo_path(repo, owner)
+        params: Dict[str, Any] = {
+            "state": state,
+            "per_page": per_page,
+        }
+        if labels:
+            params["labels"] = ",".join(labels)
+
+        issues: List[Dict[str, Any]] = []
+        page = 1
+        while True:
+            params["page"] = page
+            page_items = self._make_request(
+                "GET", f"{repo_path}/issues", params=params, use_cache=False
+            )
+            if not page_items:
+                break
+            issues.extend(page_items)
+            if len(page_items) < per_page:
+                break
+            page += 1
+
+        return issues
+
+    def create_issue(
+        self,
+        repo: str,
+        title: str,
+        body: Optional[str] = None,
+        owner: Optional[str] = None,
+        labels: Optional[List[str]] = None,
+        assignees: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Create a new issue in a repository."""
+        repo_path = self._get_repo_path(repo, owner)
+        data: Dict[str, Any] = {"title": title}
+        if body:
+            data["body"] = body
+        if labels:
+            data["labels"] = labels
+        if assignees:
+            data["assignees"] = assignees
+
+        return self._make_request("POST", f"{repo_path}/issues", data=data)
+
+    def list_pull_requests(
+        self,
+        repo: str,
+        owner: Optional[str] = None,
+        state: str = "open",
+        per_page: int = DEFAULT_PAGE_SIZE,
+    ) -> List[Dict[str, Any]]:
+        """List pull requests for a repository."""
+        repo_path = self._get_repo_path(repo, owner)
+        params: Dict[str, Any] = {
+            "state": state,
+            "per_page": per_page,
+        }
+
+        pulls: List[Dict[str, Any]] = []
+        page = 1
+        while True:
+            params["page"] = page
+            page_items = self._make_request(
+                "GET", f"{repo_path}/pulls", params=params, use_cache=False
+            )
+            if not page_items:
+                break
+            pulls.extend(page_items)
+            if len(page_items) < per_page:
+                break
+            page += 1
+
+        return pulls
+
     #
     # Branch Management
     #
-    
+
     def list_branches(
         self,
         repo: str,
@@ -802,121 +890,59 @@ class GitHubService:
         return self._make_request("POST", f"{repo_path}/git/refs", data=data)
     
     #
-    # AWS Integration
+    # Docker Integration
     #
     
-    def deploy_to_aws(
+    def deploy_to_docker(
         self,
         repo: str,
-        service: str,
-        config: Dict[str, Any],
         branch: Optional[str] = None,
         owner: Optional[str] = None,
-        aws_region: Optional[str] = None,
-        aws_profile: Optional[str] = None
+        docker_service: Optional["DockerService"] = None,
     ) -> Dict[str, Any]:
         """
-        Deploy a GitHub repository to an AWS service.
+        Deploy a GitHub repository to Docker.
         
         Args:
             repo: Repository name or full path (owner/repo).
-            service: AWS service to deploy to ('ec2', 's3', etc.).
-            config: Service-specific configuration.
             branch: Branch to deploy. If None, uses the default branch.
             owner: Repository owner. If None, uses owner from repo or default organization.
-            aws_region: AWS region to deploy to.
-            aws_profile: AWS profile to use.
+            docker_service: DockerService instance (created if not provided).
             
         Returns:
             Deployment status and details.
             
         Raises:
-            ValidationError: If service is not supported.
-            GitHubError: If deployment fails.
+            ValidationError: If deployment fails.
+            GitHubError: If repository access fails.
         """
-        # Import here to avoid circular imports
-        from ..aws.ec2 import EC2Service
-        from ..aws.s3 import S3Service
-        from ..core.credentials import AWSCredentials, get_credential_manager
+        from ..docker_svc.deploy import DockerDeployService
+        from ..docker_svc.models import DeployRequest
         
-        repo_path = self._get_repo_path(repo, owner)
-        
-        # Get repository details to ensure it exists
         repo_details = self.get_repository(repo, owner)
         
-        # Get branch if not specified
         if not branch:
             branch = repo_details.get("default_branch", "main")
         
-        # Check if repository is accessible
         try:
             self.get_branch(repo, branch, owner)
         except ResourceNotFoundError:
             raise ValidationError(f"Branch '{branch}' not found in repository")
         
-        # Get AWS credentials
-        cred_manager = get_credential_manager()
-        aws_credentials = cred_manager.get_aws_credentials(
-            profile_name=aws_profile,
-            region=aws_region
+        if not docker_service:
+            docker_service = DockerDeployService()
+        
+        request = DeployRequest(
+            repository=f"{repo_details['owner']['login']}/{repo_details['name']}",
+            branch=branch,
         )
         
-        # Deploy based on service type
-        if service.lower() == 'ec2':
-            # Deploy to EC2
-            ec2_service = EC2Service(credentials=aws_credentials)
-            
-            # Extract required config
-            instance_id = config.get('instance_id')
-            if not instance_id:
-                raise ValidationError("instance_id is required for EC2 deployment")
-            
-            deploy_path = config.get('deploy_path', '/var/www/html')
-            setup_script = config.get('setup_script')
-            
-            # Deploy to EC2
-            result = ec2_service.deploy_from_github(
-                instance_id=instance_id,
-                repository=f"{repo_details['owner']['login']}/{repo_details['name']}",
-                branch=branch,
-                deploy_path=deploy_path,
-                setup_script=setup_script,
-                github_token=self.token
-            )
-            
-            return {
-                'service': 'ec2',
-                'repository': repo_details['full_name'],
-                'branch': branch,
-                'details': result
-            }
-            
-        elif service.lower() == 's3':
-            # Import S3Service here when implemented
-            s3_service = S3Service(credentials=aws_credentials)
-            
-            # Extract required config
-            bucket_name = config.get('bucket_name')
-            if not bucket_name:
-                raise ValidationError("bucket_name is required for S3 deployment")
-            
-            source_dir = config.get('source_dir', '')
-            
-            # Clone the repository locally and upload to S3
-            # Note: This would be implemented in the S3Service
-            result = s3_service.deploy_from_github(
-                bucket_name=bucket_name,
-                repository=f"{repo_details['owner']['login']}/{repo_details['name']}",
-                branch=branch,
-                source_dir=source_dir
-            )
-            
-            return {
-                'service': 's3',
-                'repository': repo_details['full_name'],
-                'branch': branch,
-                'details': result
-            }
-            
-        else:
-            raise ValidationError(f"Unsupported AWS service: {service}")
+        result = docker_service.deploy_from_github(request, self.token)
+        
+        return {
+            'service': 'docker',
+            'repository': repo_details['full_name'],
+            'branch': branch,
+            'url': result.url,
+            'container_id': result.container_id,
+        }

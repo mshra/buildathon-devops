@@ -1,22 +1,39 @@
 """
 DevOps Agent Package - Provides functionality for DevOps operations with OpenAI Agents SDK.
 
-This package includes modules for AWS services, GitHub integration, and other DevOps
-tools, designed to be used with the OpenAI Agents SDK.
+This package includes modules for Docker container operations, GitHub integration,
+and other DevOps tools, designed to be used with the OpenAI Agents SDK.
 """
 
-from .aws import (
-    # EC2 Models
-    EC2InstanceFilter,
-    EC2StartStopRequest,
-    EC2CreateRequest,
-    EC2Instance,
+from .docker_svc import (
+    # Models
+    DeployRequest,
+    Deployment,
+    ContainerFilter,
+    ContainerAction,
+    ContainerLogRequest,
     
-    # EC2 Tools
-    list_ec2_instances,
-    start_ec2_instances,
-    stop_ec2_instances,
-    create_ec2_instance
+    # Services
+    DockerService,
+    DockerDeployService,
+    
+    # Tools
+    deploy_repository,
+    list_deployments,
+    get_deployment,
+    stop_deployment,
+    start_deployment,
+    restart_deployment,
+    remove_deployment,
+    get_deployment_logs,
+    list_containers,
+    get_container,
+    stop_container,
+    start_container,
+    restart_container,
+    remove_container,
+    get_container_logs,
+    list_images,
 )
 
 from .github import (
@@ -47,7 +64,7 @@ from .core import (
     load_config,
     
     # Credentials
-    AWSCredentials,
+    DockerCredentials,
     GitHubCredentials,
     CredentialManager,
     get_credential_manager,
@@ -61,15 +78,30 @@ from .core import (
 )
 
 __all__ = [
-    # AWS EC2
-    'EC2InstanceFilter',
-    'EC2StartStopRequest',
-    'EC2CreateRequest',
-    'EC2Instance',
-    'list_ec2_instances',
-    'start_ec2_instances',
-    'stop_ec2_instances',
-    'create_ec2_instance',
+    # Docker
+    'DeployRequest',
+    'Deployment',
+    'ContainerFilter',
+    'ContainerAction',
+    'ContainerLogRequest',
+    'DockerService',
+    'DockerDeployService',
+    'deploy_repository',
+    'list_deployments',
+    'get_deployment',
+    'stop_deployment',
+    'start_deployment',
+    'restart_deployment',
+    'remove_deployment',
+    'get_deployment_logs',
+    'list_containers',
+    'get_container',
+    'stop_container',
+    'start_container',
+    'restart_container',
+    'remove_container',
+    'get_container_logs',
+    'list_images',
     
     # GitHub
     'GitHubRepoRequest',
@@ -90,7 +122,7 @@ __all__ = [
     'get_config_value',
     'set_config_value',
     'load_config',
-    'AWSCredentials',
+    'DockerCredentials',
     'GitHubCredentials',
     'CredentialManager',
     'get_credential_manager',
@@ -101,5 +133,4 @@ __all__ = [
     'SensitiveInfoOutput'
 ]
 
-# Version
-__version__ = '0.1.0'
+__version__ = '0.2.0'

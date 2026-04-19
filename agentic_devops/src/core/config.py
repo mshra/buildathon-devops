@@ -23,12 +23,11 @@ class ConfigError(Exception):
 
 # Default configuration
 DEFAULT_CONFIG = {
-    "aws": {
-        "region": "us-west-2",
-        "profile": None,
-        "tags": {
-            "ManagedBy": "DevOpsAgent"
-        }
+    "docker": {
+        "base_url": None,
+        "workspace_dir": "/tmp/devops-deploys",
+        "default_network": "bridge",
+        "default_restart_policy": "unless-stopped"
     },
     "github": {
         "organization": None,
@@ -120,7 +119,8 @@ def _load_from_env(prefix: str) -> Dict[str, Any]:
     Load configuration from environment variables.
     
     Environment variables are converted to nested dictionaries based on double underscore
-    separators. For example, DEVOPS_AWS__REGION becomes {'aws': {'region': value}}.
+    separators. For example, DEVOPS_DOCKER__BASE_URL becomes
+    {'docker': {'base_url': value}}.
     
     Args:
         prefix: Prefix for environment variables
